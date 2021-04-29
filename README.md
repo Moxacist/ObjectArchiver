@@ -1,3 +1,58 @@
+### 先看一个现象
+
+使用 YYModel 对嵌套模型进行解归档：
+
+```objective-c
+@interface Animal : NSObject
+
+@end
+
+@implementation Animal
+
+@end
+
+@interface Cat : Animal
+
+@property (nonatomic, copy) NSString *name;
+
+@end
+
+@implementation Cat
+
+@end
+
+@interface Person : Animal
+
+@property (nonatomic, strong) NSArray <Animal *>*pets;
+
+@end
+
+@implementation Person
+
++ (nullable NSDictionary<NSString *, id> *)modelContainerPropertyGenericClass {
+    return @{@"pets": Animal.class};
+}
+
+@end
+
+  
+- (void)test {
+    Cat *cat = Cat.new;
+    cat.name = @"miao";
+    
+    Person *person = Person.new;
+    person.pets = @[cat];
+    
+    NSData *data = person.yy_modelToJSONData;
+    Person *reborn = [Person yy_modelWithJSON:data];
+    
+    NSLog(@"the name of the cat is : %@", [reborn.pets.firstObject valueForKey:@"name"]);
+  	// the name of the cat is :(null)
+}
+```
+从打印结果可以看出，宠物 `Cat` 的名字丢失了，而实际上此时反序列化后的  `pets` 都是普通的 `Animal` ，没有所谓的 `Cat`。至于丢失的原因下面再说。
+
+
 ### 问题背景
 
 之前有模仿开源项目写一个 OC 热修复功能，其中脚本部分的工作是将 OC 代码解析成语法树对象，再将语法树对象序列化成二进制文件上传到服务端。因为语法树中的每个子对象语义不同，导致生成的语法树对象嵌套逻辑比较复杂，如下所示：
@@ -47,63 +102,9 @@
 由于之前一直使用 `YYModel` 作为对象序列化和反序列的方式，所以这里第一时间想到的也是它。可是使用 YYModel 时却遇到了两个问题：
 
 1. 对于实例中的对象数组，需要为其编写映射关系，例如 `ASTResult.Nodes`
-2. 即使写了映射关系，也会出现子类化特性丢失的情况。
+2. 即使写了映射关系，也会出现子类化特性丢失的情况，像一开始那样。
 
-```objective-c
-@interface Animal : NSObject
-
-@end
-
-@implementation Animal
-
-@end
-
-
-@interface Cat : Animal
-
-@property (nonatomic, copy) NSString *name;
-
-@end
-
-@implementation Cat
-
-@end
-
-
-@interface Person : Animal
-
-@property (nonatomic, strong) NSArray <Animal *>*pets;
-
-@end
-
-@implementation Person
-
-+ (nullable NSDictionary<NSString *, id> *)modelContainerPropertyGenericClass {
-    return @{@"pets": Animal.class};
-}
-
-@end
-```
-
-定义如上所示， `Person` 有很多 动物类型的宠物，使用 `YYModel` 时添加映射关系也是 `pets: Animal`，同时 `Cat` 也是 `Animal` 的一种，拥有 `name` 属性。此时进行序列化和反序列化：
-
-```objective-c
-- (void)test {
-    Cat *cat = Cat.new;
-    cat.name = @"miao";
-    
-    Person *person = Person.new;
-    person.pets = @[cat];
-    
-    NSData *data = person.yy_modelToJSONData;
-    Person *reborn = [Person yy_modelWithJSON:data];
-    
-    NSLog(@"the name of the cat is : %@", [reborn.pets.firstObject valueForKey:@"name"]);
-  	// the name of the cat is :(null)
-}
-```
-
-从打印结果可以看出，宠物 `Cat` 的名字丢失了，而实际上此时反序列化后的  `pets` 都是普通的 `Animal` ，没有所谓的 `Cat`。原因其实很简单，`YYModel` 做反序列时会根据映射关系生成 `Animal` 对象，再生成 `_YYModelMeta`，而赋值的时候会根据 `_YYModelMeta` 的属性进行赋值，而 `Animal` 是无法找到 `name` 的，所以反序列化之后为空。部分代码如下所示：
+出现子类特性丢失的原因其实很简单，`YYModel` 做反序列时会根据映射关系生成 `Animal` 对象，再生成 `_YYModelMeta`，而赋值的时候会根据 `_YYModelMeta` 的属性进行赋值，而 `Animal` 是无法找到 `name` 的，所以反序列化之后为空。部分代码如下所示：
 
 ```objective-c
 _YYModelMeta *modelMeta = [_YYModelMeta metaWithClass:object_getClass(self)];
