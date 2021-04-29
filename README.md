@@ -249,7 +249,7 @@ static NSArray <__PropertyType *> *mc_propertyList(Class cls) {
 }
 ```
 
-这部分是根据函数类型标签获取具体的解归档函数，这里引用的是 [Type Encodings](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtTypeEncodings.html#//apple_ref/doc/uid/TP40008048-CH100-SW1) 。这里解归档函数并不是逐个匹配所有类型，但是涵盖了大部分。
+这部分是根据函数类型标签获取具体的解归档函数，引用的是 [Type Encodings](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtTypeEncodings.html#//apple_ref/doc/uid/TP40008048-CH100-SW1) 。这里解归档函数并不是逐个匹配所有类型，但是涵盖了大部分。
 
 **4. 用 Person.pets 测试下**
 
