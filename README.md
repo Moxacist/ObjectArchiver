@@ -251,7 +251,45 @@ static NSArray <__PropertyType *> *mc_propertyList(Class cls) {
 
 这部分是根据函数类型标签获取具体的解归档函数，这里引用的是 [Type Encodings](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtTypeEncodings.html#//apple_ref/doc/uid/TP40008048-CH100-SW1) 。这里解归档函数并不是逐个匹配所有类型，但是涵盖了大部分。
 
-**4. 用 Person.pets 测试下**
+**4. 添加调用入口**
+
+```objective-c
+#pragma mark - Public Method
+
+- (NSData *)serializerationResult {
+    id result = [NSKeyedArchiver archivedDataWithRootObject:self];
+    return result;
+}
+
++ (instancetype)deserializeWithData:(NSData *)data {
+    ObjectArchiver *result = [NSKeyedUnarchiver unarchiveObjectWithData: data];
+    return result;
+}
+
+#pragma mark - NSCoding
+
+- (instancetype)initWithCoder:(NSCoder *)coder {
+    self = [super init];
+    if (!self) { return self; }
+    
+    NSArray <__PropertyType *> *result = mc_propertyList(self.class);
+    for (__PropertyType *type in result) {
+        !type.decodeProperty ? : type.decodeProperty(self, coder);
+    }
+    return self;
+}
+
+- (void)encodeWithCoder:(nonnull NSCoder *)coder {
+    NSArray <__PropertyType *> *result = mc_propertyList(self.class);
+    for (__PropertyType *type in result) {
+        !type.encodeProperty ? : type.encodeProperty(self, coder);
+    }
+}
+```
+
+入口很简单，就是调用下系统的解归档函数，然后实现 `NSCoping` 协议，执行第三步的 `block`
+
+**5. 用 Person.pets 测试下**
 
 ```objective-c
 - (void)test {
@@ -269,7 +307,7 @@ static NSArray <__PropertyType *> *mc_propertyList(Class cls) {
 }
 ```
 
-这里可以看出已经达到预期效果。具体 Demo 查看 [ObjectArchiver](https://github.com/Moxacist/ObjectArchiver)。
+这里可以看出已经达到预期效果。整体代码不超过 200 行，可能有些没测试到的问题，感兴趣的去 [ObjectArchiver](https://github.com/Moxacist/ObjectArchiver) 这个 Demo 中查看这个类。
 
 
 

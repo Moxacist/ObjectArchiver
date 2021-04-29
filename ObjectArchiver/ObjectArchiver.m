@@ -116,9 +116,10 @@ static NSArray <__PropertyType *> *mc_propertyList(Class cls) {
     return superPropsCache;
 }
 
-#pragma mark -
 
 @implementation ObjectArchiver
+
+#pragma mark - Public Method
 
 - (NSData *)serializerationResult {
     id result = [NSKeyedArchiver archivedDataWithRootObject:self];
