@@ -1,6 +1,5 @@
 ### 先看一个现象
 
-使用 YYModel 对嵌套模型进行解归档：
 
 ```objective-c
 @interface Animal : NSObject
@@ -34,8 +33,12 @@
 }
 
 @end
+```
+上面 `Person` 、`Cat` 都属于 `Animal` 类型，`Person` 有一组 `Animal` 类型的宠物。因为需要使用 `YYModel`，所以为它加了关系映射：`pets: Animal`。
 
-  
+使用 YYModel 对嵌套模型进行解归档：
+
+```objective-c
 - (void)test {
     Cat *cat = Cat.new;
     cat.name = @"miao";
