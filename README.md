@@ -1,5 +1,11 @@
-### 先看一个现象
+---
+title: 如何对嵌套模型进行解归档
+date: 2021-04-29 
+tags:  OC
+categories: Note
+---
 
+### 先看一个现象
 
 ```objective-c
 @interface Animal : NSObject
@@ -50,17 +56,19 @@
     Person *reborn = [Person yy_modelWithJSON:data];
     
     NSLog(@"the name of the cat is : %@", [reborn.pets.firstObject valueForKey:@"name"]);
-  	// the name of the cat is :(null)
+      // the name of the cat is :(null)
 }
 ```
 从打印结果可以看出，宠物 `Cat` 的名字丢失了，而实际上此时反序列化后的  `pets` 都是普通的 `Animal` ，没有所谓的 `Cat`。至于丢失的原因下面再说。
 
 
+<!--more-->
+
 ### 问题背景
 
 之前有模仿开源项目写一个 OC 热修复功能，其中脚本部分的工作是将 OC 代码解析成语法树对象，再将语法树对象序列化成二进制文件上传到服务端。因为语法树中的每个子对象语义不同，导致生成的语法树对象嵌套逻辑比较复杂，如下所示：
 
-```objective-c
+```objectivec
 @interface Node : NSObject
 
 @property (nonatomic, assign) BOOL withSemicolon;
@@ -109,7 +117,7 @@
 
 出现子类特性丢失的原因其实很简单，`YYModel` 做反序列时会根据映射关系生成 `Animal` 对象，再生成 `_YYModelMeta`，而赋值的时候会根据 `_YYModelMeta` 的属性进行赋值，而 `Animal` 是无法找到 `name` 的，所以反序列化之后为空。部分代码如下所示：
 
-```objective-c
+```objectivec
 _YYModelMeta *modelMeta = [_YYModelMeta metaWithClass:object_getClass(self)];
 if (modelMeta->_keyMappedCount >= CFDictionaryGetCount((CFDictionaryRef)dic)) {
     CFDictionaryApplyFunction((CFDictionaryRef)dic, ModelSetWithDictionaryFunction, &context);
@@ -145,7 +153,7 @@ if (modelMeta->_keyMappedCount >= CFDictionaryGetCount((CFDictionaryRef)dic)) {
 
 **1. 编写一个父类，提供解归档方法**
 
-```objective-c
+```objectivec
 @interface ObjectArchiver : NSObject
 
 /// 序列化结果
@@ -159,7 +167,7 @@ if (modelMeta->_keyMappedCount >= CFDictionaryGetCount((CFDictionaryRef)dic)) {
 
 **2. 根据 Class 获取属性标签列表**
 
-```objective-c
+```objectivec
 /// className: [__PropertyType]
 static NSMutableDictionary *mc_classPropertyCache;
 
@@ -213,14 +221,14 @@ static NSArray <__PropertyType *> *mc_propertyList(Class cls) {
 
 这里代码看起来有点多，主要做的事如下：
 
-	1. 判断 `mc_classPropertyCache` 缓存中有没有该类，有就返回
-	2. 获取该类的属性列表，生成 `__PropertyType` 对象，如果该属性没有对应的变量，就排除掉
-	3. 递归寻找父类的列表，直到 `ObjectArchiver` 这个对象为止，将属性添加在列表里
-	4. 缓存最后的列表到 `mc_classPropertyCache` 中
+    1. 判断 `mc_classPropertyCache` 缓存中有没有该类，有就返回
+    2. 获取该类的属性列表，生成 `__PropertyType` 对象，如果该属性没有对应的变量，就排除掉
+    3. 递归寻找父类的列表，直到 `ObjectArchiver` 这个对象为止，将属性添加在列表里
+    4. 缓存最后的列表到 `mc_classPropertyCache` 中
 
 **3. 为属性标签添加解归档 block**
 
-```objective-c
+```objectivec
 - (void)configArchiveFunction {
     NSString *type = [[NSString stringWithUTF8String:self.type] substringToIndex:2];
     NSString *name = self.name;
@@ -254,9 +262,49 @@ static NSArray <__PropertyType *> *mc_propertyList(Class cls) {
 
 这部分是根据函数类型标签获取具体的解归档函数，引用的是 [Type Encodings](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/ObjCRuntimeGuide/Articles/ocrtTypeEncodings.html#//apple_ref/doc/uid/TP40008048-CH100-SW1) 。这里解归档函数并不是逐个匹配所有类型，但是涵盖了大部分。
 
-**4. 用 Person.pets 测试下**
+**4. 添加调用入口**
 
-```objective-c
+```objectivec
+#pragma mark - Public Method
+
+- (NSData *)serializerationResult {
+    id result = [NSKeyedArchiver archivedDataWithRootObject:self];
+    return result;
+}
+
++ (instancetype)deserializeWithData:(NSData *)data {
+    ObjectArchiver *result = [NSKeyedUnarchiver unarchiveObjectWithData: data];
+    return result;
+}
+
+#pragma mark - NSCoding
+
+- (instancetype)initWithCoder:(NSCoder *)coder {
+    self = [super init];
+    if (!self) { return self; }
+    
+    NSArray <__PropertyType *> *result = mc_propertyList(self.class);
+    for (__PropertyType *type in result) {
+        !type.decodeProperty ? : type.decodeProperty(self, coder);
+    }
+    return self;
+}
+
+- (void)encodeWithCoder:(nonnull NSCoder *)coder {
+    NSArray <__PropertyType *> *result = mc_propertyList(self.class);
+    for (__PropertyType *type in result) {
+        !type.encodeProperty ? : type.encodeProperty(self, coder);
+    }
+}
+```
+
+入口很简单，就是调用下系统的解归档函数，然后实现 `NSCoping` 协议，执行第三步的 `block`
+
+**5. 测试新代码**
+
+首先将 `Animal` 的父类改成 `ObjectArchiver`，然后用同样的代码测试：
+
+```objectivec
 - (void)test {
     Cat *cat = Cat.new;
     cat.name = @"miao";
@@ -272,7 +320,7 @@ static NSArray <__PropertyType *> *mc_propertyList(Class cls) {
 }
 ```
 
-这里可以看出已经达到预期效果。具体 Demo 查看 [ObjectArchiver](https://github.com/Moxacist/ObjectArchiver)。
+这里可以看出已经达到预期效果。整体代码不超过 200 行，可能有些没测试到的问题，感兴趣的去 [ObjectArchiver](https://github.com/Moxacist/ObjectArchiver) 这个 Demo 中查看这个类。
 
 
 
